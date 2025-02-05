@@ -4,10 +4,6 @@ import axios from 'axios';
 // import { error } from 'console';
 dotenv.config();
 
-
-
-
-
 class BoomFiService {
   private apiUrl: string;
   private apiKey: string;
@@ -19,13 +15,26 @@ class BoomFiService {
     this.apiUrl = process.env.BOOMFI_API_URL;
   }
 
-  async handleWebhook(payload: any) {
+  async handleWebhook(payload: any): Promise<boolean> {
     try {
-      console.log('Webhook payload:', payload);
+      console.log('Webhook payload received:', JSON.stringify(payload, null, 2));
       
+      // Basic payload validation
+      if (!payload || !payload.event || !payload.customer) {
+        console.error('Invalid webhook payload');
+        return false;
+      }
+
       const { event, customer, cancel_at_period_end } = payload;
       const { wallet_address, email, name } = customer;
 
+      // Validate wallet address
+      if (!wallet_address) {
+        console.error('No wallet address provided in webhook');
+        return false;
+      }
+
+      // Find or create user
       let user = await User.findOne({ walletAddress: wallet_address });
       
       if (!user) {
@@ -46,12 +55,12 @@ class BoomFiService {
         });
       }
 
-    
-      user.customerId = customer.id;
+      // Update user details
+      user.customerId = customer.id || user.customerId;
       user.name = name || user.name;
       user.email = email || user.email;
-      user.phone = customer.phone || user.phone;
 
+      // Handle different webhook events
       switch (event) {
         case 'Invoice.Updated':
           if (payload.payment_status === 'Succeeded') {
@@ -73,9 +82,11 @@ class BoomFiService {
         case 'Subscription.Updated':
           if (cancel_at_period_end !== undefined) {
             user.subscription.cancelAtPeriodEnd = cancel_at_period_end;
-            if (cancel_at_period_end) {
-              console.log('Subscription scheduled for cancellation at period end');
-            }
+            console.log(
+              cancel_at_period_end 
+                ? 'Subscription scheduled for cancellation' 
+                : 'Subscription cancellation removed'
+            );
           }
           break;
 
@@ -92,16 +103,18 @@ class BoomFiService {
 
         default:
           console.log(`Unhandled webhook event: ${event}`);
+          return false;
       }
 
+      // Save updated user
       await user.save();
+      console.log('Webhook processed successfully for wallet:', wallet_address);
       return true;
     } catch (error) {
-      console.error('Error handling webhook:', error);
-      throw error;
+      console.error('Comprehensive error handling in webhook:', error);
+      return false;
     }
   }
-
   async validateSubscription(walletAddress: string): Promise<boolean> {
     try {
       const user = await User.findOne({ walletAddress });
@@ -120,6 +133,34 @@ class BoomFiService {
     } catch (error) {
       console.error('Error validating subscription:', error);
       return false;
+    }
+  }
+  async getSubscriptionStatus(walletAddress: string) {
+    try {
+      const user = await User.findOne({ walletAddress });
+      if (!user) {
+        return {
+          status: 'Free',
+          cancelAtPeriodEnd: false
+        };
+      }
+
+      const now = new Date();
+      const isPremium = user.subscription.status === 'Premium' && 
+                        user.subscription.expiryDate &&
+                        now < user.subscription.expiryDate &&
+                        !user.subscription.cancelAtPeriodEnd;
+
+      return {
+        status: isPremium ? 'Premium' : 'Free',
+        cancelAtPeriodEnd: user.subscription.cancelAtPeriodEnd
+      };
+    } catch (error) {
+      console.error('Error fetching subscription status:', error);
+      return {
+        status: 'Free',
+        cancelAtPeriodEnd: false
+      };
     }
   }
 

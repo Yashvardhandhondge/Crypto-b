@@ -1,12 +1,16 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
-
+import BoomFiService from '../services/BoomFiService';
 
 export class AuthController {
-  static generateToken(user: any) {
+  static generateToken(user: any, subscriptionStatus: 'Free' | 'Premium') {
     return jwt.sign(
-      { _id: user._id?.toString() },
+      { 
+        _id: user._id?.toString(), 
+        walletAddress: user.walletAddress,
+        subscriptionStatus 
+      },
       process.env.JWT_SECRET || 'your-secret-key',
       { expiresIn: '7d' }
     );
@@ -24,12 +28,18 @@ export class AuthController {
       // Check if user already exists
       let user = await User.findOne({ walletAddress });
       
+      // Get subscription status
+      const subscriptionStatus = await BoomFiService.getSubscriptionStatus(walletAddress);
+
       if (user) {
-        const token = AuthController.generateToken(user);
+        const token = AuthController.generateToken(user, subscriptionStatus.status);
         res.status(200).json({ 
           message: 'User already exists',
           token,
-          user
+          user: {
+            ...user.toObject(),
+            subscription: subscriptionStatus
+          }
         });
         return;
       }
@@ -46,18 +56,25 @@ export class AuthController {
           expiryDate: null,
           subscriptionId: null,
           periodStartAt: null,
-          periodEndAt: null
+          periodEndAt: null,
+          cancelAtPeriodEnd: false
         }
       });
       
       await user.save();
 
-      const token = AuthController.generateToken(user);
+      const token = AuthController.generateToken(user, 'Free');
 
       res.status(201).json({ 
         message: 'User created successfully',
         token,
-        user 
+        user: {
+          ...user.toObject(),
+          subscription: {
+            status: 'Free',
+            cancelAtPeriodEnd: false
+          }
+        }
       });
     } catch (error) {
       console.error('Error registering user:', error);

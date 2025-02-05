@@ -1,48 +1,52 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IUser extends Document {
-  walletAddress?: string;
+  walletAddress: string; // Made required
   name?: string;
   email?: string;
   phone?: string;
   customerId?: string;
   subscription: {
     status: 'Free' | 'Premium';
-    expiryDate?: Date;
-    subscriptionId?: string;
-    periodStartAt?: Date;
-    periodEndAt?: Date;
+    expiryDate?: Date | null;
+    subscriptionId?: string | null;
+    periodStartAt?: Date | null;
+    periodEndAt?: Date | null;
     cancelAtPeriodEnd: boolean;
   };
-  customer_ident?: string;
-  guest?: boolean;
-  organisation_id?: string;
-  is_deleted?: boolean;
-  payments_count?: number;
-  last_payment_date?: Date;
+  referralCode?: string; // Optional addition for future referral system
+  lastLoginAt?: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-const userSchema = new Schema({
+const userSchema = new Schema<IUser>({
   walletAddress: {
     type: String,
+    required: true,
     unique: true,
-    sparse: true,
+    trim: true,
+    lowercase: true,
   },
   name: {
     type: String,
-    default: ''
+    trim: true,
+    default: '',
   },
   email: {
     type: String,
-    default: ''
+    trim: true,
+    lowercase: true,
+    default: '',
   },
   phone: {
     type: String,
-    default: ''
+    trim: true,
+    default: '',
   },
   customerId: {
     type: String,
-    sparse: true
+    sparse: true,
   },
   subscription: {
     status: {
@@ -52,29 +56,46 @@ const userSchema = new Schema({
     },
     expiryDate: {
       type: Date,
+      default: null,
     },
     subscriptionId: {
       type: String,
+      default: null,
     },
     periodStartAt: {
       type: Date,
+      default: null,
     },
     periodEndAt: {
       type: Date,
+      default: null,
     },
     cancelAtPeriodEnd: {
       type: Boolean,
-      default: false
-    }
+      default: false,
+    },
   },
-  customer_ident: String,
-  guest: Boolean,
-  organisation_id: String,
-  is_deleted: Boolean,
-  payments_count: Number,
-  last_payment_date: Date,
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
+  lastLoginAt: {
+    type: Date,
+    default: null,
+  },
 }, {
   timestamps: true,
+  strict: true,
 });
+
+// Add an index on walletAddress for faster queries
+userSchema.index({ walletAddress: 1 });
+
+// Validate wallet address format (optional, but recommended)
+userSchema.path('walletAddress').validate((value: string) => {
+  // Basic Ethereum address validation
+  return /^0x[a-fA-F0-9]{40}$/.test(value);
+}, 'Invalid wallet address format');
 
 export default mongoose.model<IUser>('User', userSchema);
