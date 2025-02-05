@@ -3,6 +3,12 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import BoomFiService from '../services/BoomFiService';
 
+// Define a type for subscription status
+interface SubscriptionStatusResponse {
+  status: 'Free' | 'Premium';
+  cancelAtPeriodEnd: boolean;
+}
+
 export class AuthController {
   static generateToken(user: any, subscriptionStatus: 'Free' | 'Premium') {
     return jwt.sign(
@@ -28,8 +34,8 @@ export class AuthController {
       // Check if user already exists
       let user = await User.findOne({ walletAddress });
       
-      // Get subscription status
-      const subscriptionStatus = await BoomFiService.getSubscriptionStatus(walletAddress);
+      // Get subscription status with explicit type
+      const subscriptionStatus: SubscriptionStatusResponse = await BoomFiService.getSubscriptionStatus(walletAddress);
 
       if (user) {
         const token = AuthController.generateToken(user, subscriptionStatus.status);
@@ -38,7 +44,10 @@ export class AuthController {
           token,
           user: {
             ...user.toObject(),
-            subscription: subscriptionStatus
+            subscription: {
+              status: subscriptionStatus.status,
+              cancelAtPeriodEnd: subscriptionStatus.cancelAtPeriodEnd
+            }
           }
         });
         return;
