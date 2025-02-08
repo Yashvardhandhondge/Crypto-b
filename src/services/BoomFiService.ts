@@ -135,7 +135,10 @@ class BoomFiService {
       return false;
     }
   }
-  async getSubscriptionStatus(walletAddress: string) {
+  async getSubscriptionStatus(walletAddress: string) : Promise<{
+    status: 'Free' | 'Premium';
+    cancelAtPeriodEnd: boolean;
+  }> {
     try {
       const user = await User.findOne({ walletAddress });
       if (!user) {
